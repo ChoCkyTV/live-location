@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Location — Painel</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#1a1a1a;font-family:'Fira Sans',sans-serif;display:flex;justify-content:center;padding:40px 20px;}
+.panel{width:100%;max-width:480px;display:flex;flex-direction:column;gap:16px;}
+h1{color:#66ffb2;font-size:18px;letter-spacing:2px;text-shadow:0 0 10px #00ff88;}
+.card{background:rgba(29,29,29,.95);border:2px solid #12a312;box-shadow:0 0 15px rgba(18,163,18,.2);padding:16px;display:flex;flex-direction:column;gap:10px;}
+.card-title{color:#bdbdbd;font-size:10px;letter-spacing:2px;}
+input{background:rgba(0,0,0,.5);border:1px solid rgba(18,163,18,.5);border-radius:4px;color:#66ffb2;font-family:'Fira Sans',sans-serif;font-size:13px;padding:10px 12px;outline:none;width:100%;transition:border-color .2s;}
+input::placeholder{color:rgba(102,255,178,.3);}
+input:focus{border-color:#12a312;box-shadow:0 0 8px rgba(18,163,18,.3);}
+button{background:rgba(18,163,18,.2);border:2px solid #12a312;border-radius:4px;color:#66ffb2;font-family:'Fira Sans',sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;padding:12px;cursor:pointer;transition:background .2s;width:100%;}
+button:hover{background:rgba(18,163,18,.4);}
+button:active{background:rgba(18,163,18,.6);}
+.msg{font-size:12px;letter-spacing:.5px;min-height:16px;text-align:center;}
+.msg.ok{color:#66ffb2;}
+.msg.err{color:#ff6666;}
+.hint{color:rgba(102,255,178,.35);font-size:10px;letter-spacing:.5px;line-height:1.6;}
+.token-row{display:flex;gap:8px;}
+.token-row input{flex:1;}
+.show-btn{background:rgba(18,163,18,.1);border:1px solid rgba(18,163,18,.4);border-radius:4px;color:#66ffb2;font-size:11px;padding:0 12px;cursor:pointer;white-space:nowrap;width:auto;}
+</style>
+</head>
+<body>
+<div class="panel">
+    <h1>⬡ LIVE LOCATION — PAINEL</h1>
+
+    <div class="card">
+        <div class="card-title">TOKEN DO GITHUB (salvo só no seu navegador)</div>
+        <div class="token-row">
+            <input type="password" id="token" placeholder="ghp_..." autocomplete="off"/>
+            <button class="show-btn" onclick="toggleToken()">MOSTRAR</button>
+        </div>
+        <button onclick="salvarToken()">SALVAR TOKEN</button>
+        <div class="hint">O token fica guardado só neste navegador. Nunca é enviado pra nenhum outro lugar.</div>
+        <div class="msg" id="msg-token"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">COORDENADAS ATUAIS</div>
+        <input type="text" id="coords" placeholder="39.33561787595969, -100.9938449384924" autocomplete="off"/>
+        <button onclick="enviar()">ENVIAR PRO OBS</button>
+        <div class="hint">Cole as coordenadas e clique em enviar. O widget atualiza em até 30 segundos.</div>
+        <div class="msg" id="msg-coords"></div>
+    </div>
+</div>
+
+<script>
+const GIST_ID = "b2a52ea8a2ad4f2699b5b0efddbb0cd7";
+const FILENAME = "coords.txt";
+
+// Carrega token salvo
+window.onload = () => {
+    const t = localStorage.getItem("gh_token");
+    if(t){
+        document.getElementById("token").value = t;
+        document.getElementById("msg-token").textContent = "✓ Token carregado";
+        document.getElementById("msg-token").className = "msg ok";
+    }
+};
+
+function toggleToken(){
+    const input = document.getElementById("token");
+    input.type = input.type === "password" ? "text" : "password";
+}
+
+function salvarToken(){
+    const t = document.getElementById("token").value.trim();
+    const msg = document.getElementById("msg-token");
+    if(!t.startsWith("ghp_") && !t.startsWith("github_pat_")){
+        msg.textContent = "Token inválido — deve começar com ghp_";
+        msg.className = "msg err";
+        return;
+    }
+    localStorage.setItem("gh_token", t);
+    msg.textContent = "✓ Token salvo no navegador";
+    msg.className = "msg ok";
+}
+
+async function enviar(){
+    const msg = document.getElementById("msg-coords");
+    const raw = document.getElementById("coords").value.trim();
+    const token = localStorage.getItem("gh_token") || document.getElementById("token").value.trim();
+
+    if(!token){
+        msg.textContent = "Salve o token primeiro";
+        msg.className = "msg err";
+        return;
+    }
+
+    const match = raw.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+    if(!match){
+        msg.textContent = "Formato inválido — use: lat, lon";
+        msg.className = "msg err";
+        return;
+    }
+
+    msg.textContent = "Enviando...";
+    msg.className = "msg ok";
+
+    try{
+        const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            method: "PATCH",
+            headers:{
+                "Authorization": `token ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                files:{ [FILENAME]:{ content: raw } }
+            })
+        });
+
+        if(r.ok){
+            msg.textContent = "✓ Enviado! Widget atualiza em até 30s";
+            msg.className = "msg ok";
+        } else {
+            const e = await r.json();
+            msg.textContent = `Erro: ${e.message}`;
+            msg.className = "msg err";
+        }
+    }catch(e){
+        msg.textContent = "Falha na conexão";
+        msg.className = "msg err";
+    }
+}
+
+document.getElementById("coords").addEventListener("keydown", e => {
+    if(e.key === "Enter") enviar();
+});
+</script>
+</body>
+</html>
